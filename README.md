@@ -41,16 +41,16 @@ A `defer` statement has an async variant: `defer await` that awaits the code exe
     * `throw`
     * `break`
     * `continue`
-    * The end of each iteration of a loop
     * End of a block
-* `defer` statements in the same scope contribute to a shared stack. Statements and blocks added by `defer` are evaluated in reverse-order i.e. last-in-first-out (LIFO).
-    * Blocks are evaluated **as a group**, not as individual statements
+* `defer` statements in the same scope contribute to a shared stack. Statements added by `defer` are evaluated in reverse-order i.e. LIFO.
     * Statements never contribute to outer scopes, only the immediate containing scope
 * Blocks are evaluated with distinct scopes; they do not share declarations
     * This is OK: `defer { const x = 1; } defer { const x = 2; }` 
 * Exceptions thrown by individual `defer` statements do not stop the remaining statements in the stack from executing.
     * Multiple exceptions accumulate in a `SuppressedError` construct that forms a chain of errors, much like `Error`'s `cause`
 * `defer await` allows the usage of `await` within a block; `defer` does not regardless of the surrounding context.
+* `defer` statements are not allowed as standalone statements of if/else/for/do/while constructs, they must reside in a block
+     * This behavior aligns with `let`/`const` variable statements
 
 Requiring `defer await` to use `await` was added for two reasons:
 1. Removes confusion surrounding the behavior of awaited intermediate expressions
