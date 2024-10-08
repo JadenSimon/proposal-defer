@@ -53,8 +53,9 @@ A `defer` statement has an async variant: `defer await` that awaits the code exe
 * `defer await` allows the usage of `await` within a block; `defer` does not regardless of the surrounding context.
 
 Requiring `defer await` to use `await` was added for two reasons:
-    1. Removes confusion surrounding the behavior of something like `defer foo(await bar())` (do we `await` `bar()` at scope exit?)
-    2. Simplifies implementation logic, both for engines and transpilers
+1. Removes confusion surrounding the behavior of awaited intermediate expressions
+     * Example: `defer foo(await bar())`, do we wait for `bar()` at scope exit?
+2. Simplifies implementation logic, both for engines and transpilers
 
 ## Grammar
 ```
