@@ -161,6 +161,11 @@ try {
 } catch (e) {
     console.log(e.message) // uh oh!
 }
+
+// Try statements do not change the behavior of `defer` regardless 
+// of whether it's in a `try`/`catch`/`finally` block. 
+
+
 ```
 
 ### Asynchronous Defer
@@ -307,42 +312,6 @@ defer { (console.log('')); }
 
 This is because `defer ()` is already perfectly valid syntax; we cannot break backwards compatability.
 
-### Try Statement
-Try statements do not change the behavior of `defer` regardless of whether it's in a `try`/`catch`/`finally` block. 
-
-`try`/`finally` example:
-```js
-try {
-    defer console.log('two');
-    console.log('one');
-} finally {
-    defer console.log('four');
-    console.log('three');
-}
-
-// Output:
-// one
-// two
-// three
-// four
-```
-
-`try`/`catch` example:
-```js
-try {
-    defer console.log('one');
-    throw new Error('Error!');
-    console.log('not happening');
-} catch (e) {
-    defer console.log('two');
-    console.log(e.message);
-}
-
-// Output:
-// one
-// Error!
-// two
-```
 
 
 ## Potential Usage Concerns
