@@ -36,7 +36,7 @@ The behavior in this proposal aligns nicely with Swift/Zig (LIFO, supports block
 ## Behavior
 A `defer` statement has an async variant: `defer await` that awaits the code execution. The following behaviors apply to both `defer` and `defer await` unless otherwise specified. 
 
-* The expression statement or block following `defer` is unconditionally executed when the current scope exits. This can be from:
+* The expression or block following `defer` is unconditionally executed when the current scope exits. This can be from:
     * `return`
     * `throw`
     * `break`
@@ -48,7 +48,7 @@ A `defer` statement has an async variant: `defer await` that awaits the code exe
     * This is OK: `defer { const x = 1; } defer { const x = 2; }` 
 * Exceptions thrown by individual `defer` statements do not stop the remaining statements in the stack from executing.
     * Multiple exceptions accumulate in a `SuppressedError` construct that forms a chain of errors, much like `Error`'s `cause`
-* `defer await` allows the usage of `await` within a block; `defer` does not regardless of the surrounding context.
+* `defer await` allows the usage of `await` within a block or expression; `defer` does not regardless of the surrounding context.
 * `defer` statements are not allowed as standalone statements of if/else/for/do/while constructs, they must reside in a block
      * This behavior aligns with `let`/`const` variable statements
 
