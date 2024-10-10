@@ -1,6 +1,6 @@
 # ECMAScript `defer` Statement
 
-We propose the introduction of a new control-flow statement into ECMAScript: `defer`. This statement executes code unconditionally at the end of the current scope in a last-in-first-out (LIFO) manner.
+We propose the introduction of a new control-flow statement into ECMAScript: `defer`. This statement executes code unconditionally at the end of the current lexical scope in a last-in-first-out (LIFO) manner.
 
 ```js
 defer console.log('world!');
@@ -34,8 +34,6 @@ The behavior in this proposal aligns nicely with Swift/Zig (LIFO, supports block
 
 
 ## Behavior
-A `defer` statement has an async variant: `defer await` that awaits the code execution. The following behaviors apply to both `defer` and `defer await` unless otherwise specified. 
-
 * The expression or block following `defer` is unconditionally executed when the current scope exits. This can be from:
     * `return`
     * `throw`
@@ -48,20 +46,16 @@ A `defer` statement has an async variant: `defer await` that awaits the code exe
     * This is OK: `defer { const x = 1; } defer { const x = 2; }` 
 * Exceptions thrown by individual `defer` statements do not stop the remaining statements in the stack from executing.
     * Multiple exceptions accumulate in a `SuppressedError` construct that forms a chain of errors, much like `Error`'s `cause`
-* `defer await` allows the usage of `await` within a block or expression; `defer` does not regardless of the surrounding context.
+* `defer` statements inherit the current Await context
 * `defer` statements are not allowed as standalone statements of if/else/for/do/while constructs, they must reside in a block
-     * This behavior aligns with `let`/`const` variable statements
+    * This behavior aligns with `let`/`const` variable statements
+* Standalone `let`/`const` variable statements cannot be deferred e.g. `defer const foo = 'bar'`
 
-Requiring `defer await` to use `await` was added for two reasons:
-1. Removes confusion surrounding the behavior of awaited intermediate expressions
-     * Example: `defer foo(await bar())`, do we wait for `bar()` at scope exit?
-2. Simplifies implementation logic, both for engines and transpilers
 
 ## Grammar
 ```
 DeferStatement[Await]:
-    defer DeferBlockOrExpressionStatement[~Await]
-    [+Await] defer await DeferBlockOrExpressionStatement[+Await]
+    defer DeferBlockOrExpressionStatement[?Await]
 
 DeferBlockOrExpressionStatement[Await]:
     DeferBlock[?Await]
@@ -74,13 +68,12 @@ DeferBlockBody[Await]:
     StatementList[~Yield, ?Await, ~Return] opt 
 
 DeferExpressionStatement[Await]:
-   [~Await] [lookahead ≠ (] ExpressionStatement[~Yield, ~Await]
+   [~Await] [lookahead ∉ { (, BinaryOperator }] ExpressionStatement[~Yield, ~Await]
    [+Await] ExpressionStatement[~Yield, +Await]
 ```
 
 `DeferBlock` is similar to a class static block except that `await` is conditionally allowed.
 
-Note that `await` is not treated as a contextual keyword. That is, `defer await` is always invalid outside of an Await context. This is done for simplicity.
 
 ## Valid Syntax
 
@@ -165,11 +158,11 @@ try {
 
 // Try statements do not change the behavior of `defer` regardless 
 // of whether it's in a `try`/`catch`/`finally` block. 
-
-
 ```
 
 ### Asynchronous Defer
+A `defer` statement is asynchronous if it contains an `await` expression. The behavior must be the same as-if the expression or block were inlined at the scope exit. For example, if an `await` doesn't occur until halfway into a block, the preceding statements must be executed in the same microtask as the previously executed statement.
+
 ```js
 defer await file.close();
 
@@ -178,17 +171,27 @@ defer await Promise.all([
   resource2.dispose(),
 ]);
 
-// The block variant of `defer await` offers the most granular level of control
-
-defer await {
+defer {
     await resource1.dispose();
     // ... do something else
     await resource2.dispose();
 }
 
+// These two `defer` statements clarify the "same microtask" behavior.
+// The calls for `first` and `second` must occur in the same microtask 
+// because there are no "intermediate" `await` expressions.
+
+defer {
+    console.log('second');
+    await asyncWork();
+    console.log('third');
+}
+
+defer console.log('first');
+
 // We can wait for certain things on scope exit while letting other things happen as we move on
 // The same could be achieved with a separate async function declaration
-defer await {
+defer {
     const task = await myPendingTask;
     if (shouldCancel(task)) {
         console.log('cancelling task without waiting');
@@ -208,14 +211,7 @@ defer { return foo; }
 
 // `defer await` is not allowed in a non-async function or the top-level of a Script
 function foo() {
-    defer await;
-}
-
-// We cannot use `await` in a normal defer despite being in an async function or the top-level of a Module
-async function foo() {
-    defer {
-        await resource.dispose();
-    }
+    defer await x();
 }
 
 // No import declarations
@@ -234,7 +230,17 @@ while (i < 3) defer console.log(i++);
 // While technically possible to support, doing so creates a confusing situation, does 
 // `defer` execute per-iteration or in the outer scope, that also lacks practical utility.
 //
-//  Omitting the `defer` keyword results in the same net behavior without the ambiguity.
+// Omitting the `defer` keyword results in the same net behavior without the ambiguity.
+
+
+// The following are not allowed because they are both confusing and have no practical value
+// Standalone `let`/`const` variable statements:
+defer const x = 1;
+defer let x = 1;
+
+// Standalone function expressions and arrow functions
+defer function fn() {};
+defer () => {};
 ```
 
 Other situations which lead to SyntaxError (it's the same behavior as `try`):
@@ -300,7 +306,7 @@ Diverging from this existing behavior is not worth it given the likely niche use
 Advanced ECMAScript users are the most likely to run into this situation, and they're likely to be familiar with the existing behavior.
 
 ### Parenthesized Expressions
-`defer` (without `await`) followed by a ParenthesizedExpression is interpretted as a CallExpression
+`defer` followed by a ParenthesizedExpression is interpretted as a CallExpression
 
 ```js
 // Attempt to call `defer` with the result of `console.log`
@@ -311,15 +317,22 @@ defer void (console.log(''));
 defer { (console.log('')); }
 ```
 
-This is because `defer ()` is already perfectly valid syntax; we cannot break backwards compatability.
+This is because `defer ()` is already perfectly valid syntax; we cannot break backwards compatibility.
 
+### Binary Expressions
+TODO: does the grammar define "binary operator" anywhere?
 
+`defer` followed by a binary operator is parsed as a binary expression for backwards compatibility.
+
+```js
+defer + 1; // Adds 1 to the variable `defer`
+```
 
 ## Potential Usage Concerns
 This section addreses common usage concerns from adding `defer` to the language
 
 ### LIFO Evaluation
-`defer` statements are evaluated in an order _opposite_ of their appeareance in source code. For someone first learning about `defer`, this can seem unnatural:
+`defer` statements are evaluated in an order _opposite_ of their appearance in source code. For someone first learning about `defer`, this can seem unnatural:
 ```js
 defer console.log('one');
 defer console.log('two');
@@ -343,7 +356,7 @@ The LIFO behavior ensures that dependent state is always unwound before its depe
 ```js
 const r1 = new Resource();
 const r2 = new Resource(r1); // `r1` would not be disposed if we fail here!
-defer r2.dispose();
+defer r2.dispose(); // We must dispose of `r2` before `r1`
 defer r1.dispose();
 ```
 
